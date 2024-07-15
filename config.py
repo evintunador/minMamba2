@@ -6,21 +6,22 @@ import time
 @dataclass
 class ModelConfig:
     """
-    Design your GPT here
+    Design your Mamba here
     Yes I know dropout_rate should probably be in TrainConfig but it was easier to implement from here
     """
     # general hyperparameters
-    dim: int = 192
-    device: str = 'cuda' if torch.cuda.is_available() else 'cpu' # can't do MPS bc metal doesn't support complex64 used in RoPE
+    dim: int = 32
+    device: str = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu' 
     dropout_rate = 0.1 # percent of neurons to set to 0 during training as a way of adding randomness & improving generalization
+    max_seq_len: int = 64 # 
 
     # tokenizer
     tokenizer: str = 'bpe_v2' # must choose from one of the folders in 'tokenizers/'. current options: 'bpe_v1', 'bpe_v2'
-    vocab_len: int = 8192 # options assuming 'bpe' are 95 (character-wise), 128, 256, 512, 1024, 2048, 4096, & 8192
+    vocab_len: int = 256 # options assuming 'bpe' are 95 (character-wise), 128, 256, 512, 1024, 2048, 4096, & 8192
     # ^ that number does not include the three tokens bos, eos, and pad
 
     # Residual Layers
-    num_layers: int = 6 # small models should err on the side of many many layers at the expense of attention & mlp sizes
+    num_layers: int = 2 # small models should err on the side of many many layers at the expense of attention & mlp sizes
     second_resid_norm: bool = False # True adds an extra Norm after the attn & MLP, like in Grok. Only recommended if using RMSNorm
     
     # Multi-Layer Perceptrion
@@ -30,24 +31,12 @@ class ModelConfig:
     mlp_gated: bool = True # Turns SiLU into SwiGLU, GeLU into GeGLU, etc
     # ^ if gated == True, mlp_hidden_mult will automatically adjust to maintain parameter count
 
-    # Multi-Query Attention
-    num_q_heads: int = 2 # `num_q_heads % num_kv_heads == 0` must be true
-    num_kv_heads: int = 1 # set =num_q_heads to revert to regular multi-head attention (not recommended)
-    head_dim: int = dim // num_q_heads # most common choices are 32, 64 and especially 128 bc those are what works with FlashAttention
-    theta: float = 10_000 # 10_000 is the most common choice. Llama3 uses 50_000
-    max_seq_len: int = 512 # 512 is the most my 8gb of ram can handle
-
     # normalization
     scale_first_resid: bool = True # whether to multiply the first residual state by sqrt(dim)
     norm_type: str = 'RMSNorm' # options are 'RMSNorm'(recommended), 'LayerNorm', and 'CosineNorm'. Add more options in 'norm.py'
     norm_affine: bool = True # whether to use a linear layer after each norm. recommended especially if you're using LayerNorm or CosineNorm
     norm_bias: bool = True # whether to add a bias to the linear layer after each norm. doesn't do anything if norm_affine == False
     eps: float = 1e-6 # small constant to prevent division by 0. Not really worth editing
-
-    # inference (kv caching)
-    max_batch_size: int = 1 # i haven't tried changing this from 1
-    # it needs to be set >1 at the first model initialization if you ever want to be able to do batched inference. i should fix that
-    # i think batched inference is probably broken rn bc of my shitty tokenizer. might fix in future
 
 @dataclass
 class TrainConfig:
@@ -58,7 +47,7 @@ class TrainConfig:
     model_name = f'{time.strftime("%Y-%m-%d|%H-%M-%S")}' # defaults to the time that config.py was imported
     
     weight_decay: float = 0.05
-    batch_size: int = 24
+    batch_size: int = 32
     
     # total number of batches to run over the course of training
     max_iters: int = 6_000 # i recommend at least 1_000
